@@ -14,196 +14,156 @@ import org.apache.tools.ant.BuildException;
 import org.apache.tools.ant.Project;
 import org.apache.tools.ant.Task;
 
-import org.eclipse.jgit.lib.Commit;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.lib.Repository;
-import org.eclipse.jgit.lib.Treeish;
+import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.revwalk.RevTag;
+import org.eclipse.jgit.revwalk.RevWalk;
+import org.eclipse.jgit.lib.RepositoryBuilder;
 
 public class JGitDescribeTask extends Task {
-  private File dir;
-  private int shalength;
-  private String target;
-  private String property;
+    
+    private File dir;
+    private int shalength;
+    private String target;
+    private String property;
 
-  public void setDir(String path) {
-    dir = new File(path);
-  }
-
-  public void setShalength(int length) {
-    shalength = length;
-  }
-
-  public void setTarget(String description) {
-    target = description;
-  }
-
-  public void setProperty(String oproperty) {
-    property = oproperty;
-  }
-
-  public JGitDescribeTask() {
-    dir = new File(".git");
-    shalength = 7;
-    target = "HEAD";
-  }
-
-  private static Map<ObjectId, String> collectTags(Repository r) {
-    Map<ObjectId, String> map = new HashMap<ObjectId, String>();
-    Map<String, Ref> refs = r.getTags();
-
-    for(Map.Entry<String, Ref> tag : refs.entrySet()) {
-      ObjectId tagcommit = tag.getValue().getObjectId();
-      map.put(tagcommit, tag.getKey());
+    public void setDir (File path) {
+        dir = path;
     }
 
-    return map;
-  }
-
-  private static List<Commit> candidateCommits(Commit child, Map<ObjectId, String> tagmap) {
-    Repository r = child.getRepository();
-    Queue<Commit> q = new LinkedList<Commit>();
-    q.add(child);
-    List<Commit> taggedcommits = new LinkedList<Commit>();
-    Set<ObjectId> seen = new HashSet<ObjectId>();
-
-    while(q.size() > 0) {
-      Commit commit = q.remove();
-      if(tagmap.containsKey(commit.getCommitId())) {
-        taggedcommits.add(commit);
-        // don't consider commits that are farther away than this tag
-        continue;
-      }
-      for(ObjectId oid : commit.getParentIds()) {
-        if(!seen.contains(oid)) {
-          seen.add(oid);
-          try {
-            q.add(r.mapCommit(oid));
-          } catch(IOException e) {
-            e.printStackTrace();
-          }
-        }
-      }
+    public void setShalength (int length) {
+        shalength = length;
     }
 
-    return taggedcommits;
-  }
-
-  private static void seeAllParents(Commit child, Set<ObjectId> seen) {
-    Repository r = child.getRepository();
-    Queue<Commit> q = new LinkedList<Commit>();
-    q.add(child);
-
-    while(q.size() > 0) {
-      Commit commit = q.remove();
-      for(ObjectId oid : commit.getParentIds()) {
-        if (seen.contains(oid))
-          continue;
-        seen.add(oid);
-        try {
-          q.add(r.mapCommit(oid));
-        } catch(IOException e) {
-          e.printStackTrace();
-        }
-      }
-    }
-  }
-
-  private static int distanceBetween(Commit child, Commit parent) {
-    Repository r = child.getRepository();
-    Set<ObjectId> seena = new HashSet<ObjectId>();
-    Set<ObjectId> seenb = new HashSet<ObjectId>();
-    Queue<Commit> q = new LinkedList<Commit>();
-    q.add(child);
-    int distance = 0;
-    ObjectId parentId = parent.getCommitId();
-
-    while(q.size() > 0) {
-      Commit commit = q.remove();
-      ObjectId commitId = commit.getCommitId();
-
-      if(seena.contains(commitId))
-        continue;
-      seena.add(commitId);
-
-      if(parentId.equals(commitId)) {
-        // don't consider commits that are included in this commit
-        seeAllParents(commit, seenb);
-        // remove things we shouldn't have included
-        for(ObjectId oid : seenb) {
-          if(seena.contains(oid)) {
-            distance--;
-          }
-        }
-        seena.addAll(seenb);
-        continue;
-      }
-
-      for(ObjectId oid : commit.getParentIds()) {
-        if(!seena.contains(oid)) {
-          try {
-            q.add(r.mapCommit(oid));
-          } catch(IOException e) {
-            e.printStackTrace();
-          }
-        }
-      }
-      distance++;
+    public void setTarget (String description) {
+        target = description;
     }
 
-    return distance;
-  }
+    public void setProperty (String oproperty) {
+        property = oproperty;
+    }
 
-  public void execute() throws BuildException {
-    if(property == null) {
-      throw new BuildException("\"property\" attribute must be set!");
+    public JGitDescribeTask () {
+        dir = new File(".git");
+        shalength = 7;
+        target = "HEAD";
     }
     
-    if(!dir.exists()) {
-      throw new BuildException("directory " + dir + " does not exist");
+    public void execute () throws BuildException {
+        if (property == null) {
+            throw new BuildException("\"property\" attribute must be set!");
+        }
+        
+        if (!dir.exists()) {
+            throw new BuildException("directory " + dir + " does not exist");
+        }
+        
+        Repository repository = null;
+        try {
+            RepositoryBuilder builder = new RepositoryBuilder();
+            repository = builder.setGitDir(dir).build();
+        } catch(IOException e) {
+            throw new BuildException("Could not open repository", e);
+        }
+        
+        RevWalk walk = null;
+        RevCommit start = null;
+        try {
+            walk = new RevWalk(repository);
+            start = walk.parseCommit(repository.resolve(target));
+            walk.markStart(start);
+        } catch (IOException e) {
+            throw new BuildException("Could not find target", e);
+        }
+        
+        Map<ObjectId, String> tags = new HashMap<ObjectId,String>();
+        
+        for (Map.Entry<String, Ref> tag : repository.getTags().entrySet()) {
+            try {
+                RevTag r = walk.parseTag(tag.getValue().getObjectId());
+                ObjectId taggedCommit = r.getObject().getId();
+                tags.put(taggedCommit, tag.getKey());
+            } catch (IOException e) {
+                throw new BuildException("Tag not found", e);
+            }
+        }
+        List<RevCommit> taggedParents = taggedParentCommits(walk, start, tags);
+        RevCommit best = null;
+        int bestDistance = 0;
+        for (RevCommit commit : taggedParents) {
+            int distance = distanceBetween(start, commit);
+            if (best == null || (distance < bestDistance)) {
+                best = commit;
+                bestDistance = distance;
+            }
+        }
+        
+        StringBuilder sb = new StringBuilder();
+        if (best != null) {
+            sb.append(tags.get(best.getId()));
+            sb.append("-");
+            sb.append(bestDistance);
+            sb.append("-g");
+        }
+        sb.append(start.getId().abbreviate(shalength).name());
+        
+        getProject().setProperty(property, sb.toString());
     }
+    
+    private List<RevCommit> taggedParentCommits (RevWalk walk, 
+                                                 RevCommit child, 
+                                                 Map<ObjectId, String> tagmap) throws BuildException {
+        Queue<RevCommit> q = new LinkedList<RevCommit>();
+        q.add(child);
+        List<RevCommit> taggedcommits = new LinkedList<RevCommit>();
+        Set<ObjectId> seen = new HashSet<ObjectId>();
 
-    Repository r = null;
-    try {
-      r = new Repository(dir);
-    } catch(IOException e) {
-      throw new BuildException("Could not open repository", e);
+        while(q.size() > 0) {
+            RevCommit commit = q.remove();
+            if (tagmap.containsKey(commit.getId())) {
+                taggedcommits.add(commit);
+                // don't consider commits that are farther away than this tag
+                continue;
+            }
+            for (RevCommit p : commit.getParents()) {
+                if (!seen.contains(p.getId())) {
+                    seen.add(p.getId());
+                    try {
+                        q.add(walk.parseCommit(p.getId()));
+                    } catch (IOException e) {
+                        throw new BuildException("Parent not found", e);
+                    }
+                }
+            }
+        }
+        return taggedcommits;
     }
-
-    Commit c = null;
-    try {
-      c = r.mapCommit(target);
-    } catch(IOException e) {
-      throw new BuildException("Could not map commit " + target, e);
+    
+    private int distanceBetween (RevCommit child, RevCommit parent) {
+        Set<ObjectId> seen = new HashSet<ObjectId>();
+        Queue<RevCommit> q1 = new LinkedList<RevCommit>();
+        q1.add(child);
+        Queue<RevCommit> q2 = new LinkedList<RevCommit>();
+        int distance = 0;
+        while ((q1.size() > 0) && (q2.size() > 0)) {
+            if (q1.size() == 0) {
+                distance += 1;
+                q1.addAll(q2);
+                q2.clear();
+            }
+            RevCommit commit = q1.remove();
+            for (RevCommit p : commit.getParents()) {
+                if (p.getId().equals(parent.getId())) {
+                    return distance;
+                }
+                if (!seen.contains(p.getId())) {
+                    q2.add(p);
+                }
+            }
+            seen.add(commit.getId());
+        }
+        return distance;
     }
-
-    if(c == null) {
-      throw new BuildException("Repository has no HEAD revision");
-    }
-
-    Map<ObjectId, String> tagmap = collectTags(r);
-
-    List<Commit> taggedparentcommits = candidateCommits(c, tagmap);
-
-    Commit best = null;
-    int distance = 0;
-
-    for(Commit commit : taggedparentcommits) {
-      int thisdistance = distanceBetween(c, commit);
-      if(best == null || thisdistance < distance) {
-        best = commit;
-        distance = thisdistance;
-      }
-    }
-
-    StringBuilder sb = new StringBuilder();
-    if(best != null) {
-      sb.append(tagmap.get(best.getCommitId()));
-      sb.append("-");
-      sb.append(distance);
-      sb.append("-g");
-    }
-    sb.append(c.getCommitId().abbreviate(r, shalength).name());
-    getProject().setProperty(property, sb.toString());
-  }
 }
