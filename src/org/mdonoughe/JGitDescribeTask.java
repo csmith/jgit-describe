@@ -146,8 +146,8 @@ public class JGitDescribeTask extends Task {
         Queue<RevCommit> q1 = new LinkedList<RevCommit>();
         q1.add(child);
         Queue<RevCommit> q2 = new LinkedList<RevCommit>();
-        int distance = 0;
-        while ((q1.size() > 0) && (q2.size() > 0)) {
+        int distance = 1;
+        while ((q1.size() > 0) || (q2.size() > 0)) {
             if (q1.size() == 0) {
                 distance += 1;
                 q1.addAll(q2);
