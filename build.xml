@@ -1,22 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project name="git-describe" default="jar" basedir=".">
+  <path id="java.lib.path">
+    <fileset dir="lib">
+      <include name="*.jar"/>
+    </fileset>
+  </path>
   <target name="build">
     <mkdir dir="bin"/>
-    <javac destdir="bin" source="1.5" encoding="UTF-8" debug="on">
-      <src path="jgit/org.eclipse.jgit/src"/>
+    <javac destdir="bin" source="1.5" encoding="UTF-8" debug="on" classpathref="java.lib.path" includeAntRuntime="true">
       <src path="src"/>
-      <include name="org/eclipse/jgit/errors/**/*.java"/>
-      <include name="org/eclipse/jgit/lib/**/*.java"/>
-      <include name="org/eclipse/jgit/util/**/*.java"/>
       <include name="org/mdonoughe/JGitDescribeTask.java"/>
     </javac>
   </target>
-
   <target name="jar" depends="build">
     <mkdir dir="dist"/>
-    <taskdef name="git-describe" classname="org.mdonoughe.JGitDescribeTask" classpath="bin"/>
-    <git-describe dir=".git" property="describe"/>
-    <jar destfile="dist/jgit-describe-${describe}.jar">
+    <jar destfile="dist/jgit-describe.jar">
       <fileset dir="bin">
         <include name="**/*.class"/>
       </fileset>
