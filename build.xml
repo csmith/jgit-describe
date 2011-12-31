@@ -20,4 +20,8 @@
       </fileset>
     </jar>
   </target>
+  <target name="clean" >
+    <delete dir="dist"/>
+    <delete dir="bin"/>
+  </target>
 </project>
