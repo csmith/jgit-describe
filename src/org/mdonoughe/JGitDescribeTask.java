@@ -125,11 +125,15 @@ public class JGitDescribeTask extends Task {
         StringBuilder sb = new StringBuilder();
         if (best != null) {
             sb.append(tags.get(best.getId()));
-            sb.append("-");
-            sb.append(bestDistance);
-            sb.append("-g");
+            if (bestDistance > 0) {
+                sb.append("-");
+                sb.append(bestDistance);
+                sb.append("-g");
+            }
         }
-        sb.append(start.getId().abbreviate(shalength).name());
+        if (bestDistance > 0) {
+            sb.append(start.getId().abbreviate(shalength).name());
+        }
 
         getProject().setProperty(property, sb.toString());
     }
@@ -176,12 +180,16 @@ public class JGitDescribeTask extends Task {
                 q2.clear();
             }
             RevCommit commit = q1.remove();
-            for (RevCommit p : commit.getParents()) {
-                if (p.getId().equals(parent.getId())) {
-                    return distance;
-                }
-                if (!seen.contains(p.getId())) {
-                    q2.add(p);
+            if (commit.getParents() == null) {
+                return 0;
+            } else {
+                for (RevCommit p : commit.getParents()) {
+                    if (p.getId().equals(parent.getId())) {
+                        return distance;
+                    }
+                    if (!seen.contains(p.getId())) {
+                        q2.add(p);
+                    }
                 }
             }
             seen.add(commit.getId());
