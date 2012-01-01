@@ -12,7 +12,6 @@ import java.util.Set;
 
 import java.util.regex.Pattern;
 import org.apache.tools.ant.BuildException;
-import org.apache.tools.ant.Project;
 import org.apache.tools.ant.Task;
 
 import org.eclipse.jgit.lib.ObjectId;
@@ -23,43 +22,84 @@ import org.eclipse.jgit.revwalk.RevTag;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.lib.RepositoryBuilder;
 import org.eclipse.jgit.revwalk.FollowFilter;
-import org.eclipse.jgit.treewalk.filter.TreeFilter;
 
+/**
+ * Ant task to emulate git-describe using jgit.
+ */
 public class JGitDescribeTask extends Task {
 
+    /** Path to .git Directory. */
     private File dir;
+
+    /** Length of sha1 to use in output. */
     private int shalength;
-    private String target;
+
+    /** What reference to use as a starting point for the walk. */
+    private String ref;
+
+    /** What property to store the output in. */
     private String property;
+
+    /** Check specifically for the last commit in this subdir. */
     private String subdir;
 
-    public void setDir (File path) {
+    /**
+     * Set the .git directory
+     *
+     * @param path
+     */
+    public void setDir(final File path) {
         dir = path;
     }
 
-    public void setShalength (int length) {
+    /**
+     * Set the sha1 length
+     *
+     * @param length New value
+     */
+    public void setShalength(final int length) {
         shalength = length;
     }
 
-    public void setTarget (String description) {
-        target = description;
+    /**
+     * Set the reference to use as a starting point for the walk.
+     *
+     * @param newRef New value
+     */
+    public void setRef(final String newRef) {
+        ref = newRef;
     }
 
-    public void setProperty (String oproperty) {
+    /**
+     * Set the property to store the output in
+     *
+     * @param oproperty New value
+     */
+    public void setProperty(final String oproperty) {
         property = oproperty;
     }
 
-    public void setSubDir (String oproperty) {
-        subdir = oproperty;
+    /**
+     * Set the subdir to look at
+     *
+     * @param newSubDir New value
+     */
+    public void setSubDir(final String newSubDir) {
+        subdir = newSubDir;
     }
 
-    public JGitDescribeTask () {
+    /**
+     * Create a new instance of JGitDescribeTask
+     */
+    public JGitDescribeTask() {
         dir = new File(".git");
         shalength = 7;
-        target = "HEAD";
+        ref = "HEAD";
     }
 
-    public void execute () throws BuildException {
+    /** {@inheritDoc} */
+    @Override
+    public void execute() throws BuildException {
         if (property == null) {
             throw new BuildException("\"property\" attribute must be set!");
         }
@@ -88,7 +128,7 @@ public class JGitDescribeTask extends Task {
                 }
                 walk.setTreeFilter(FollowFilter.create(subdir));
             }
-            start = walk.parseCommit(repository.resolve(target));
+            start = walk.parseCommit(repository.resolve(ref));
             walk.markStart(start);
             if (subdir != null) {
                 start = walk.next();
@@ -99,7 +139,7 @@ public class JGitDescribeTask extends Task {
             throw new BuildException("Could not find target", e);
         }
 
-        Map<ObjectId, String> tags = new HashMap<ObjectId,String>();
+        final Map<ObjectId, String> tags = new HashMap<ObjectId,String>();
 
         for (Map.Entry<String, Ref> tag : repository.getTags().entrySet()) {
             try {
@@ -107,11 +147,16 @@ public class JGitDescribeTask extends Task {
                 ObjectId taggedCommit = r.getObject().getId();
                 tags.put(taggedCommit, tag.getKey());
             } catch (IOException e) {
-                throw new BuildException("Tag not found", e);
+                // Theres really no need to panic yet.
             }
         }
 
-        List<RevCommit> taggedParents = taggedParentCommits(walk, start, tags);
+        // No tags found. Panic.
+        if (tags.isEmpty()) {
+            throw new BuildException("No tags found.");
+        }
+
+        final List<RevCommit> taggedParents = taggedParentCommits(walk, start, tags);
         RevCommit best = null;
         int bestDistance = 0;
         for (RevCommit commit : taggedParents) {
@@ -122,7 +167,7 @@ public class JGitDescribeTask extends Task {
             }
         }
 
-        StringBuilder sb = new StringBuilder();
+        final StringBuilder sb = new StringBuilder();
         if (best != null) {
             sb.append(tags.get(best.getId()));
             if (bestDistance > 0) {
@@ -138,16 +183,25 @@ public class JGitDescribeTask extends Task {
         getProject().setProperty(property, sb.toString());
     }
 
-    private List<RevCommit> taggedParentCommits (RevWalk walk,
-                                                 RevCommit child,
-                                                 Map<ObjectId, String> tagmap) throws BuildException {
-        Queue<RevCommit> q = new LinkedList<RevCommit>();
+    /**
+     * This does something. I think it gets every possible parent tag this
+     * commit has, then later we look for which is closest and use that as
+     * the tag to describe. Or something like that.
+     *
+     * @param walk
+     * @param child
+     * @param tagmap
+     * @return
+     * @throws BuildException
+     */
+    private List<RevCommit> taggedParentCommits(final RevWalk walk, final RevCommit child, final Map<ObjectId, String> tagmap) throws BuildException {
+        final Queue<RevCommit> q = new LinkedList<RevCommit>();
         q.add(child);
-        List<RevCommit> taggedcommits = new LinkedList<RevCommit>();
-        Set<ObjectId> seen = new HashSet<ObjectId>();
+        final List<RevCommit> taggedcommits = new LinkedList<RevCommit>();
+        final Set<ObjectId> seen = new HashSet<ObjectId>();
 
-        while(q.size() > 0) {
-            RevCommit commit = q.remove();
+        while (q.size() > 0) {
+            final RevCommit commit = q.remove();
             if (tagmap.containsKey(commit.getId())) {
                 taggedcommits.add(commit);
                 // don't consider commits that are farther away than this tag
@@ -167,19 +221,27 @@ public class JGitDescribeTask extends Task {
         return taggedcommits;
     }
 
-    private int distanceBetween (RevCommit child, RevCommit parent) {
-        Set<ObjectId> seen = new HashSet<ObjectId>();
-        Queue<RevCommit> q1 = new LinkedList<RevCommit>();
+    /**
+     * Calculate the distance between 2 given commits, parent and child.
+     *
+     * @param child Commit to calculate distance to (The latest commit)
+     * @param parent Commit to calculate distance from (The last tag)
+     * @return Numeric value between the 2 commits.
+     */
+    private int distanceBetween(final RevCommit child, final RevCommit parent) {
+        final Set<ObjectId> seen = new HashSet<ObjectId>();
+        final Queue<RevCommit> q1 = new LinkedList<RevCommit>();
+        final Queue<RevCommit> q2 = new LinkedList<RevCommit>();
+
         q1.add(child);
-        Queue<RevCommit> q2 = new LinkedList<RevCommit>();
         int distance = 1;
         while ((q1.size() > 0) || (q2.size() > 0)) {
             if (q1.size() == 0) {
-                distance += 1;
+                distance++;
                 q1.addAll(q2);
                 q2.clear();
             }
-            RevCommit commit = q1.remove();
+            final RevCommit commit = q1.remove();
             if (commit.getParents() == null) {
                 return 0;
             } else {
