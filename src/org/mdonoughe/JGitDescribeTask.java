@@ -131,9 +131,11 @@ public class JGitDescribeTask extends Task {
             start = walk.parseCommit(repository.resolve(ref));
             walk.markStart(start);
             if (subdir != null) {
-                start = walk.next();
-                walk = new RevWalk(repository);
-                start = walk.parseCommit(start);
+                if (walk.iterator().hasNext()) {
+                    start = walk.next();
+                    walk = new RevWalk(repository);
+                    start = walk.parseCommit(start);
+                }
             }
         } catch (IOException e) {
             throw new BuildException("Could not find target", e);
