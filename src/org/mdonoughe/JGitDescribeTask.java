@@ -97,6 +97,29 @@ public class JGitDescribeTask extends Task {
         ref = "HEAD";
     }
 
+    /**
+     * Get a Revision Walker instance set up with the correct tree filter.
+     *
+     * @param repository Repository that should be walked.
+     * @return RevWalker instance with Tree Filter if required.
+     * @throws BuildException If the given subdir is invalid.
+     */
+    public RevWalk getWalk(final Repository repository) throws BuildException {
+        RevWalk walk = null;
+        walk = new RevWalk(repository);
+
+        if (subdir != null) {
+            final String parent = repository.getDirectory().getParent() + "/";
+            subdir = subdir.replaceFirst("^" + Pattern.quote(parent), "");
+            if (!new File(parent + subdir).exists()) {
+                throw new BuildException("'"+subdir+"' does not appear to be a subdir of this repo.");
+            }
+            walk.setTreeFilter(FollowFilter.create(subdir));
+        }
+
+        return walk;
+    }
+
     /** {@inheritDoc} */
     @Override
     public void execute() throws BuildException {
@@ -119,22 +142,16 @@ public class JGitDescribeTask extends Task {
         RevWalk walk = null;
         RevCommit start = null;
         try {
-            walk = new RevWalk(repository);
-            if (subdir != null) {
-                final String parent = repository.getDirectory().getParent() + "/";
-                subdir = subdir.replaceFirst("^" + Pattern.quote(parent), "");
-                if (!new File(parent + subdir).exists()) {
-                    throw new BuildException("'"+subdir+"' does not appear to be a subdir of this repo.");
-                }
-                walk.setTreeFilter(FollowFilter.create(subdir));
-            }
+            walk = getWalk(repository);
+
             start = walk.parseCommit(repository.resolve(ref));
             walk.markStart(start);
             if (subdir != null) {
-                if (walk.iterator().hasNext()) {
-                    start = walk.next();
-                    walk = new RevWalk(repository);
-                    start = walk.parseCommit(start);
+                // final RevWalk subWalk = getWalk(repository);
+                final RevCommit next = walk.next();
+                if (next != null) {
+                    walk = getWalk(repository);
+                    start = walk.parseCommit(next);
                 }
             }
         } catch (IOException e) {
