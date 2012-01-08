@@ -197,7 +197,6 @@ public class JGitDescribeTask extends Task {
             start = walk.parseCommit(repository.resolve(ref));
             walk.markStart(start);
             if (subdir != null) {
-System.out.println("Subdir: " + subdir);
                 final RevCommit next = walk.next();
                 if (next != null) {
                     walk = getWalk(repository);
