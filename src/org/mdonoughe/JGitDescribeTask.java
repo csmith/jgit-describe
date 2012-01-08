@@ -161,7 +161,9 @@ public class JGitDescribeTask extends Task {
             if (!new File(parent + subdir).exists()) {
                 throw new BuildException("'"+subdir+"' does not appear to be a subdir of this repo.");
             }
-            walk.setTreeFilter(FollowFilter.create(subdir));
+            // jgit is stupid on windows....
+            final String filterDir = (File.separatorChar == '\\') ? subdir.replace('\\', '/') : subdir;
+            walk.setTreeFilter(FollowFilter.create(filterDir));
         }
 
         return walk;
@@ -195,7 +197,7 @@ public class JGitDescribeTask extends Task {
             start = walk.parseCommit(repository.resolve(ref));
             walk.markStart(start);
             if (subdir != null) {
-                // final RevWalk subWalk = getWalk(repository);
+System.out.println("Subdir: " + subdir);
                 final RevCommit next = walk.next();
                 if (next != null) {
                     walk = getWalk(repository);
