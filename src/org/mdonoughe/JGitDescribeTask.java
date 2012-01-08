@@ -2,6 +2,8 @@ package org.mdonoughe;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.BufferedReader;
+import java.io.FileReader;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -42,6 +44,51 @@ public class JGitDescribeTask extends Task {
 
     /** Check specifically for the last commit in this subdir. */
     private String subdir;
+
+    /**
+     * Take a file, and parse its contents into a String.
+     *
+     * @param file File to read.
+     * @return String content of file.
+     */
+    private String fileAsString(final File file) throws IOException {
+        final StringBuffer fileData = new StringBuffer(1000);
+        final BufferedReader reader = new BufferedReader(new FileReader(file));
+        char[] buf = new char[1024];
+        int numRead = 0;
+        while ((numRead = reader.read(buf)) != -1 ) {
+            fileData.append(buf, 0, numRead);
+        }
+        reader.close();
+        return fileData.toString();
+    }
+
+    /**
+     * Take a file, and try and resolve it as a .git directory.
+     *
+     * @param file File to parse
+     * @return File possibly pointing to a .git directory.
+     *         If the given file is already a directory, it will be returned,
+     *         If it is a file, it will be attempted to be parsed as .git-file
+     *         to find a directory. This is done recursively until a valid
+     *         directory is found, or a file can't be parsed. (In which case
+     *         the last successful directory will be returned, or the file given).
+     *         Ultimately, a File object will be returned, that will either be what
+     *         was passed into us, or a directory that may or may not be a real .git
+     */
+    public File getGitDir(final File file) {
+        if (!file.isDirectory()) {
+            try {
+                final String content = fileAsString(file);
+                final String[] bits = content.split(":", 2);
+                if (bits.length > 1) {
+                    return getGitDir(new File(bits[1].trim()));
+                }
+            } catch (final IOException ioe) {
+            }
+        }
+        return file;
+    }
 
     /**
      * Set the .git directory
@@ -109,7 +156,7 @@ public class JGitDescribeTask extends Task {
         walk = new RevWalk(repository);
 
         if (subdir != null) {
-            final String parent = repository.getDirectory().getParent() + "/";
+            final String parent = dir.getParent() + File.separator;
             subdir = subdir.replaceFirst("^" + Pattern.quote(parent), "");
             if (!new File(parent + subdir).exists()) {
                 throw new BuildException("'"+subdir+"' does not appear to be a subdir of this repo.");
@@ -127,14 +174,16 @@ public class JGitDescribeTask extends Task {
             throw new BuildException("\"property\" attribute must be set!");
         }
 
-        if (!dir.exists()) {
-            throw new BuildException("directory " + dir + " does not exist");
+        final File gitDir = getGitDir(dir);
+
+        if (!gitDir.exists() || !gitDir.isDirectory() || !new File(gitDir, "config").exists()) {
+            throw new BuildException("directory " + dir + " does not appear to be a valid .git directory.");
         }
 
         Repository repository = null;
         try {
             RepositoryBuilder builder = new RepositoryBuilder();
-            repository = builder.setGitDir(dir).build();
+            repository = builder.setGitDir(gitDir).build();
         } catch(IOException e) {
             throw new BuildException("Could not open repository", e);
         }
@@ -143,7 +192,6 @@ public class JGitDescribeTask extends Task {
         RevCommit start = null;
         try {
             walk = getWalk(repository);
-
             start = walk.parseCommit(repository.resolve(ref));
             walk.markStart(start);
             if (subdir != null) {
