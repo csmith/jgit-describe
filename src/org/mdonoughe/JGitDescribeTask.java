@@ -15,6 +15,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import org.apache.tools.ant.BuildException;
 import org.apache.tools.ant.Task;
+import org.apache.tools.ant.types.Path;
 
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Ref;
@@ -157,13 +158,15 @@ public class JGitDescribeTask extends Task {
 
         if (subdir != null) {
             final String parent = dir.getParent() + File.separator;
-            subdir = subdir.replaceFirst("^" + Pattern.quote(parent), "");
-            if (!new File(parent + subdir).exists()) {
-                throw new BuildException("'"+subdir+"' does not appear to be a subdir of this repo.");
+            for (String sd : subdir.split(":")) {
+                sd = sd.replaceFirst("^" + Pattern.quote(parent), "");
+                if (!new File(parent + sd).exists()) {
+                    throw new BuildException("'"+sd+"' does not appear to be a subdir of this repo.");
+                }
+                // jgit is stupid on windows....
+                final String filterDir = (File.separatorChar == '\\') ? sd.replace('\\', '/') : sd;
+                walk.setTreeFilter(FollowFilter.create(filterDir));
             }
-            // jgit is stupid on windows....
-            final String filterDir = (File.separatorChar == '\\') ? subdir.replace('\\', '/') : subdir;
-            walk.setTreeFilter(FollowFilter.create(filterDir));
         }
 
         return walk;
