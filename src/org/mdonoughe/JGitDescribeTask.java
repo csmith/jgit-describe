@@ -81,7 +81,7 @@ public class JGitDescribeTask extends Task {
         if (!file.isDirectory()) {
             try {
                 final String content = fileAsString(file);
-                final String[] bits = content.split(":", 2);
+                final String[] bits = content.split(";", 2);
                 if (bits.length > 1) {
                     return getGitDir(new File(bits[1].trim()));
                 }
