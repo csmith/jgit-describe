@@ -162,6 +162,9 @@ public class JGitDescribeTask extends Task {
                         if (!seenb.contains(pp)) {
                             seenb.add(pp);
                             pq.add(pp);
+                        }
+                    }
+                }
             	pq.add(commit);
                 while (pq.size() > 0) {
                     for (RevCommit pp : pq.remove().getParents()) {
