@@ -83,9 +83,12 @@ public class JGitDescribeTask extends Task {
                 final String content = fileAsString(file);
                 final String[] bits = content.split(":", 2);
                 if (bits.length > 1) {
-                    return getGitDir(new File(bits[1].trim()));
+                    final File res = new File(file.getParent() + File.separatorChar + bits[1].trim());
+                    // System.out.println("Trying File: " + res.toString());
+                    return getGitDir(res);
                 }
             } catch (final IOException ioe) {
+               System.out.println("IOE: " + ioe.getMessage());
             }
         }
         return file;
@@ -182,7 +185,7 @@ public class JGitDescribeTask extends Task {
         final File gitDir = getGitDir(dir);
 
         if (!gitDir.exists() || !gitDir.isDirectory() || !new File(gitDir, "config").exists()) {
-            throw new BuildException("directory " + dir + " does not appear to be a valid .git directory.");
+            throw new BuildException("directory " + dir + " ("+gitDir.toString()+") does not appear to be a valid .git directory.");
         }
 
         Repository repository = null;
