@@ -83,8 +83,13 @@ public class JGitDescribeTask extends Task {
                 final String content = fileAsString(file);
                 final String[] bits = content.split(":", 2);
                 if (bits.length > 1) {
-                    final File res = new File(file.getParent() + File.separatorChar + bits[1].trim());
-                    // System.out.println("Trying File: " + res.toString());
+                    final File res;
+                    // Is this a relative path or an absolute path?
+                    if (bits[1].charAt(0) == '.') {
+                        res = new File(file.getParent() + File.separatorChar + bits[1].trim());
+                    } else {
+                        res = new File(bits[1].trim());
+                    }
                     return getGitDir(res);
                 }
             } catch (final IOException ioe) {
