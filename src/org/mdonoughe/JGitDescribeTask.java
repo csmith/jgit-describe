@@ -85,7 +85,7 @@ public class JGitDescribeTask extends Task {
                 if (bits.length > 1) {
                     final File res;
                     // Is this a relative path or an absolute path?
-                    if (bits[1].charAt(0) == '.') {
+                    if (bits[1].trim().charAt(0) == '.') {
                         res = new File(file.getParent() + File.separatorChar + bits[1].trim());
                     } else {
                         res = new File(bits[1].trim());
