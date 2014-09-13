@@ -24,4 +24,5 @@
     <delete dir="dist"/>
     <delete dir="bin"/>
   </target>
+  <target name="test" depends="clean, jar" />
 </project>
