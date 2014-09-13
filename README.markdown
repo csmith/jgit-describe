@@ -15,6 +15,15 @@ Building
 --------
 If this is a fresh or newly updated checkout, run `git submodule update --init` to get the latest jgit submodule and then run `ant` (or `ant jar` to actually build the jar file.
 
+CI
+--
+
+JGit-Describe Uses Travis-CI for Continuous Integration, the status of which is shown below.
+
+All pull requests must pass CI before being accepted.
+
+[![Build Status](https://travis-ci.org/ShaneMcC/jgit-describe.png?branch=master)](https://travis-ci.org/ShaneMcC/jgit-describe)
+
 Usage
 -----
 Add a taskdef like the following to your build.xml.
