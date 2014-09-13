@@ -1,9 +1,20 @@
 package org.mdonoughe;
 
-import java.io.File;
-import java.io.IOException;
+import org.apache.tools.ant.BuildException;
+import org.apache.tools.ant.Task;
+import org.eclipse.jgit.lib.ObjectId;
+import org.eclipse.jgit.lib.Ref;
+import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.lib.RepositoryBuilder;
+import org.eclipse.jgit.revwalk.FollowFilter;
+import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.revwalk.RevTag;
+import org.eclipse.jgit.revwalk.RevWalk;
+
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileReader;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -11,20 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
-
 import java.util.regex.Pattern;
-import org.apache.tools.ant.BuildException;
-import org.apache.tools.ant.Task;
-import org.apache.tools.ant.types.Path;
-
-import org.eclipse.jgit.lib.ObjectId;
-import org.eclipse.jgit.lib.Ref;
-import org.eclipse.jgit.lib.Repository;
-import org.eclipse.jgit.revwalk.RevCommit;
-import org.eclipse.jgit.revwalk.RevTag;
-import org.eclipse.jgit.revwalk.RevWalk;
-import org.eclipse.jgit.lib.RepositoryBuilder;
-import org.eclipse.jgit.revwalk.FollowFilter;
 
 /**
  * Ant task to emulate git-describe using jgit.
@@ -180,13 +178,13 @@ public class JGitDescribeTask extends Task {
         return walk;
     }
 
-    /** {@inheritDoc} */
-    @Override
-    public void execute() throws BuildException {
-        if (property == null) {
-            throw new BuildException("\"property\" attribute must be set!");
-        }
-
+    /**
+     * Calculates the git description.
+     *
+     * @return A description of the git revision for the specified repository/folder.
+     * @throws BuildException If something went wrong, in some fashion.
+     */
+    public String getDescription() throws BuildException {
         final File gitDir = getGitDir(dir);
 
         if (!gitDir.exists() || !gitDir.isDirectory() || !new File(gitDir, "config").exists()) {
@@ -236,7 +234,7 @@ public class JGitDescribeTask extends Task {
                 }
                 tags.put(taggedCommit, r);
             } catch (IOException e) {
-                // Theres really no need to panic yet.
+                // There's really no need to panic yet.
             }
         }
 
@@ -269,7 +267,17 @@ public class JGitDescribeTask extends Task {
             sb.append(start.getId().abbreviate(shalength).name());
         }
 
-        getProject().setProperty(property, sb.toString());
+        return sb.toString();
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void execute() throws BuildException {
+        if (property == null) {
+            throw new BuildException("\"property\" attribute must be set!");
+        }
+
+        getProject().setProperty(property, getDescription());
     }
 
     /**
