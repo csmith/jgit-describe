@@ -349,12 +349,12 @@ public class JGitDescribeTask extends Task {
                         }
                     }
                 }
-            	pq.add(commit);
+                pq.add(commit);
                 while (pq.size() > 0) {
                     for (RevCommit pp : pq.remove().getParents()) {
                         if (!seenb.contains(pp)) {
-                        	seenb.add(pp);
-                        	pq.add(pp);
+                            seenb.add(pp);
+                            pq.add(pp);
                         }
                     }
                 }
