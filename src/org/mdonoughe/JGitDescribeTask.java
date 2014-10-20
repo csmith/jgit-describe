@@ -11,10 +11,11 @@ import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevTag;
 import org.eclipse.jgit.revwalk.RevWalk;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -30,7 +31,7 @@ import java.util.regex.Pattern;
 public class JGitDescribeTask extends Task {
 
     /** Path to .git Directory. */
-    private File dir;
+    private Path dir;
 
     /** Length of sha1 to use in output. */
     private int shalength;
@@ -45,21 +46,12 @@ public class JGitDescribeTask extends Task {
     private String subdir;
 
     /**
-     * Take a file, and parse its contents into a String.
-     *
-     * @param file File to read.
-     * @return String content of file.
+     * Create a new instance of JGitDescribeTask
      */
-    private String fileAsString(final File file) throws IOException {
-        final StringBuffer fileData = new StringBuffer(1000);
-        final BufferedReader reader = new BufferedReader(new FileReader(file));
-        char[] buf = new char[1024];
-        int numRead = 0;
-        while ((numRead = reader.read(buf)) != -1 ) {
-            fileData.append(buf, 0, numRead);
-        }
-        reader.close();
-        return fileData.toString();
+    public JGitDescribeTask() {
+        dir = Paths.get(".git");
+        shalength = 7;
+        ref = "HEAD";
     }
 
     /**
@@ -75,20 +67,13 @@ public class JGitDescribeTask extends Task {
      *         Ultimately, a File object will be returned, that will either be what
      *         was passed into us, or a directory that may or may not be a real .git
      */
-    public File getGitDir(final File file) {
-        if (!file.isDirectory()) {
+    public Path getGitDir(final Path file) {
+        if (!Files.isDirectory(file)) {
             try {
-                final String content = fileAsString(file);
+                final String content = new String(Files.readAllBytes(file));
                 final String[] bits = content.split(":", 2);
                 if (bits.length > 1) {
-                    final File res;
-                    // Is this a relative path or an absolute path?
-                    if (bits[1].trim().charAt(0) == '.') {
-                        res = new File(file.getParent() + File.separatorChar + bits[1].trim());
-                    } else {
-                        res = new File(bits[1].trim());
-                    }
-                    return getGitDir(res);
+                    return getGitDir(file.getParent().resolve(bits[1].trim()));
                 }
             } catch (final IOException ioe) {
                System.out.println("IOE: " + ioe.getMessage());
@@ -99,10 +84,15 @@ public class JGitDescribeTask extends Task {
 
     /**
      * Set the .git directory
-     *
-     * @param path
      */
     public void setDir(final File path) {
+        dir = path.toPath();
+    }
+
+    /**
+     * Set the .git directory
+     */
+    public void setPath(final Path path) {
         dir = path;
     }
 
@@ -143,15 +133,6 @@ public class JGitDescribeTask extends Task {
     }
 
     /**
-     * Create a new instance of JGitDescribeTask
-     */
-    public JGitDescribeTask() {
-        dir = new File(".git");
-        shalength = 7;
-        ref = "HEAD";
-    }
-
-    /**
      * Get a Revision Walker instance set up with the correct tree filter.
      *
      * @param repository Repository that should be walked.
@@ -159,7 +140,7 @@ public class JGitDescribeTask extends Task {
      * @throws BuildException If the given subdir is invalid.
      */
     public RevWalk getWalk(final Repository repository) throws BuildException {
-        RevWalk walk = null;
+        RevWalk walk;
         walk = new RevWalk(repository);
 
         if (subdir != null) {
@@ -185,22 +166,22 @@ public class JGitDescribeTask extends Task {
      * @throws BuildException If something went wrong, in some fashion.
      */
     public String getDescription() throws BuildException {
-        final File gitDir = getGitDir(dir);
+        final Path gitDir = getGitDir(dir);
 
-        if (!gitDir.exists() || !gitDir.isDirectory() || !new File(gitDir, "config").exists()) {
+        if (!Files.isDirectory(gitDir) || !Files.isRegularFile(gitDir.resolve("config"))) {
             throw new BuildException("directory " + dir + " ("+gitDir.toString()+") does not appear to be a valid .git directory.");
         }
 
-        Repository repository = null;
+        Repository repository;
         try {
             RepositoryBuilder builder = new RepositoryBuilder();
-            repository = builder.setGitDir(gitDir).build();
+            repository = builder.setGitDir(gitDir.toFile()).build();
         } catch(IOException e) {
             throw new BuildException("Could not open repository", e);
         }
 
-        RevWalk walk = null;
-        RevCommit start = null;
+        RevWalk walk;
+        RevCommit start;
         try {
             walk = getWalk(repository);
             start = walk.parseCommit(repository.resolve(ref));
@@ -216,7 +197,7 @@ public class JGitDescribeTask extends Task {
             throw new BuildException("Could not find target", e);
         }
 
-        final Map<ObjectId, RevTag> tags = new HashMap<ObjectId, RevTag>();
+        final Map<ObjectId, RevTag> tags = new HashMap<>();
 
         for (Map.Entry<String, Ref> tag : repository.getTags().entrySet()) {
             try {
@@ -270,7 +251,6 @@ public class JGitDescribeTask extends Task {
         return sb.toString();
     }
 
-    /** {@inheritDoc} */
     @Override
     public void execute() throws BuildException {
         if (property == null) {
@@ -284,18 +264,12 @@ public class JGitDescribeTask extends Task {
      * This does something. I think it gets every possible parent tag this
      * commit has, then later we look for which is closest and use that as
      * the tag to describe. Or something like that.
-     *
-     * @param walk
-     * @param child
-     * @param tagmap
-     * @return
-     * @throws BuildException
      */
     private List<RevCommit> taggedParentCommits(final RevWalk walk, final RevCommit child, final Map<ObjectId, RevTag> tagmap) throws BuildException {
-        final Queue<RevCommit> q = new LinkedList<RevCommit>();
+        final Queue<RevCommit> q = new LinkedList<>();
         q.add(child);
-        final List<RevCommit> taggedcommits = new LinkedList<RevCommit>();
-        final Set<ObjectId> seen = new HashSet<ObjectId>();
+        final List<RevCommit> taggedcommits = new LinkedList<>();
+        final Set<ObjectId> seen = new HashSet<>();
 
         while (q.size() > 0) {
             final RevCommit commit = q.remove();
@@ -327,9 +301,9 @@ public class JGitDescribeTask extends Task {
      */
     private static int distanceBetween (RevCommit child, RevCommit parent) {
         int distance = 0;
-        Set<RevCommit> seena = new HashSet<RevCommit>();
-        Set<RevCommit> seenb = new HashSet<RevCommit>();
-        Queue<RevCommit> q = new LinkedList<RevCommit>();
+        Set<RevCommit> seena = new HashSet<>();
+        Set<RevCommit> seenb = new HashSet<>();
+        Queue<RevCommit> q = new LinkedList<>();
         q.add(child);
         while (q.size() > 0) {
             RevCommit commit = q.remove();
@@ -339,7 +313,7 @@ public class JGitDescribeTask extends Task {
             seena.add(commit);
             if (parent.equals(commit)) {
                 // don't consider commits that are included in this commit
-                Queue<RevCommit> pq = new LinkedList<RevCommit>();
+                Queue<RevCommit> pq = new LinkedList<>();
                 pq.add(commit);
                 while (pq.size() > 0) {
                     for (RevCommit pp : pq.remove().getParents()) {
