@@ -325,33 +325,54 @@ public class JGitDescribeTask extends Task {
      * @param parent Commit to calculate distance from (The last tag)
      * @return Numeric value between the 2 commits.
      */
-    private int distanceBetween(final RevCommit child, final RevCommit parent) {
-        final Set<ObjectId> seen = new HashSet<ObjectId>();
-        final Queue<RevCommit> q1 = new LinkedList<RevCommit>();
-        final Queue<RevCommit> q2 = new LinkedList<RevCommit>();
-
-        q1.add(child);
-        int distance = 1;
-        while ((q1.size() > 0) || (q2.size() > 0)) {
-            if (q1.size() == 0) {
-                distance++;
-                q1.addAll(q2);
-                q2.clear();
+    private static int distanceBetween (RevCommit child, RevCommit parent) {
+        int distance = 0;
+        Set<RevCommit> seena = new HashSet<RevCommit>();
+        Set<RevCommit> seenb = new HashSet<RevCommit>();
+        Queue<RevCommit> q = new LinkedList<RevCommit>();
+        q.add(child);
+        while (q.size() > 0) {
+            RevCommit commit = q.remove();
+            if (seena.contains(commit)) {
+                continue;
             }
-            final RevCommit commit = q1.remove();
-            if (commit.getParents() == null) {
-                return 0;
-            } else {
-                for (RevCommit p : commit.getParents()) {
-                    if (p.getId().equals(parent.getId())) {
-                        return distance;
-                    }
-                    if (!seen.contains(p.getId())) {
-                        q2.add(p);
+            seena.add(commit);
+            if (parent.equals(commit)) {
+                // don't consider commits that are included in this commit
+                Queue<RevCommit> pq = new LinkedList<RevCommit>();
+                pq.add(commit);
+                while (pq.size() > 0) {
+                    for (RevCommit pp : pq.remove().getParents()) {
+                        if (!seenb.contains(pp)) {
+                            seenb.add(pp);
+                            pq.add(pp);
+                        }
                     }
                 }
+                pq.add(commit);
+                while (pq.size() > 0) {
+                    for (RevCommit pp : pq.remove().getParents()) {
+                        if (!seenb.contains(pp)) {
+                            seenb.add(pp);
+                            pq.add(pp);
+                        }
+                    }
+                }
+                // remove things we shouldn't have included
+                for (RevCommit b : seenb) {
+                    if (seena.contains(b)) {
+                        distance--;
+                    }
+                }
+                seena.addAll(seenb);
+                continue;
             }
-            seen.add(commit.getId());
+            for (RevCommit p : commit.getParents()) {
+                if (!seena.contains(p)) {
+                    q.add(p);
+                }
+            }
+            distance++;
         }
         return distance;
     }
